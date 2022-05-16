@@ -92,7 +92,6 @@ case class TripData (
 }
 
 case class Trip (
-    val id: Long,
     val VendorID: Int,
     val lpep_pickup_datetime: DateTime,
     val lpep_dropoff_datetime: DateTime,
@@ -404,7 +403,6 @@ object TaxiTrip {
         } yield {
           val linefieldsTrimed = linefields.map(_.trim)
           Trip(
-            id = Util.getIdGenerator().generateNextId(),
             VendorID = 0, //linefieldsTrimed(0).toInt,
             lpep_pickup_datetime = formatter.parseDateTime(linefieldsTrimed(1)),
             lpep_dropoff_datetime = formatter.parseDateTime(linefieldsTrimed(2)),
