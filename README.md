@@ -31,6 +31,12 @@ The taxi trip data file, NYC zones file, the space grid size, the time grid size
 
 The application configuration file is at taxitrip/src/main/resources/application.conf
 
+**configuration names:**
+taxiTrip.gridSize.latLngGridSize
+taxiTrip.gridSize.dateTimeGridSize
+taxiTrip.inputFile.tripData
+taxiTrip.inputFile.zoneData
+
 ### Environment ###
 The application is written in Scala 2.13
 
