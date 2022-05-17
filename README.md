@@ -1,4 +1,4 @@
-#Taxi of NYC
+# Taxi of NYC
 
 Taxitrip application that performs spatial-temporal analysis for NYC taxi trips
 
