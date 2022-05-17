@@ -15,13 +15,13 @@ class InputData (
     val zoneMapDataFile: String) {
     val tripData: TripData = readTripData(tripDataFile)
     val zoneMapData: ZoneMap = readZoneMapFromCsv(zoneMapDataFile)
-    val anyDateTime: DateTime = tripData.trips(0).lpep_pickup_datetime
+    val anyDateTime: DateTime = tripData.trips.head.lpep_pickup_datetime
 }
 
 object gridX {
     var latLngGrid: Option[LatLngGrid] = None
     var dateTimeGrid: Option[DateTimeGrid] = None
-    def getLatLngGrid(data: InputData) = {
+    def getLatLngGrid(data: InputData): LatLngGrid = {
       val llg = if (latLngGrid.isEmpty) {
          val llg = data.zoneMapData.toLatLngGrid(gridSize = ConfigFactory.load().getString("taxiTrip.gridSize.latLngGridSize").toInt)
          latLngGrid = Some(llg)
@@ -29,10 +29,10 @@ object gridX {
       } else {
          latLngGrid.get
       }
-      println(s"latlnggrid: ${llg}")
+      println(s"latlnggrid:\n${llg}")
       llg
     }
-    def getDateTimeGrid(data: InputData) = {
+    def getDateTimeGrid(data: InputData): DateTimeGrid = {
       val dtg = if (dateTimeGrid.isEmpty) {
         val dtg = data.tripData.getDateTimeGrid(gridSize = ConfigFactory.load().getString("taxiTrip.gridSize.dateTimeGridSize").toInt)
         dateTimeGrid = Some(dtg)
@@ -40,14 +40,14 @@ object gridX {
       } else {
         dateTimeGrid.get
       }
-      println(s"datetimegrid: ${dtg}")
+      println(s"datetimegrid:\n${dtg}")
       dtg
     }
 }
 
 case class Pair (
-   val num1: Double = 0.0,
-   val num2: Double = 0.0
+   num1: Double = 0.0,
+   num2: Double = 0.0
 ) {
     def plus(p:Pair): Pair = {
         Pair(num1 + p.num1, num2 + p.num2)
@@ -58,13 +58,14 @@ case class Pair (
 }
 
 case class TripData (
-    val trips: List[Trip]
+    trips: List[Trip]
 ) {
-    val mostlyOnMonth = trips.map(_.lpep_pickup_datetime.monthOfYear().get()).groupBy(a => a).map{
+    val mostlyOnMonth: Int = trips.map(_.lpep_pickup_datetime.monthOfYear().get()).groupBy(a => a).map{
       case (month, months) => (month, months.size)
     }.maxBy(_._2)._1
 
     def getDateTimeGrid(gridSize: Int = 10): DateTimeGrid = {
+      // filter out liner data time point. For example, a year 2009 trip record is mixed in the 2022-02 trip data file
       val dateTimeMin: DateTime = trips
         .filter(trip =>
             trip.lpep_dropoff_datetime.monthOfYear().get() == mostlyOnMonth &&
@@ -74,15 +75,17 @@ case class TripData (
         ).foldLeft(
           new DateTime("2099-05-05T10:11:12.123")
         ){
-          (acc, curr) => if(acc.isAfter(curr)) {
+          (acc, curr) => if (acc.isAfter(curr)) {
             curr
           } else {
             acc
           }
       }
       val dateTimeMax: DateTime = trips.flatMap(trip=>
-        List(trip.lpep_pickup_datetime, trip.lpep_dropoff_datetime)).foldLeft(new DateTime("1999-05-05T10:11:12.123")){
-        (acc, curr) => if(acc.isAfter(curr)) {acc} else {curr}
+        List(trip.lpep_pickup_datetime, trip.lpep_dropoff_datetime)).foldLeft(
+          new DateTime("1999-05-05T10:11:12.123")
+      ){
+        (acc, curr) => if (acc.isAfter(curr)) {acc} else {curr}
       }
       val dateTimeLists: List[List[DateTime]] = Util.gridifyDateTime(dateTimeMin, dateTimeMax, gridSize)
       DateTimeGrid(dateTimeLists.map(dateTimeList =>
@@ -92,27 +95,28 @@ case class TripData (
 }
 
 case class Trip (
-    val VendorID: Int,
-    val lpep_pickup_datetime: DateTime,
-    val lpep_dropoff_datetime: DateTime,
-    val store_and_fwd_flag: String,
-    val RatecodeID: Double,
-    val PULocationID: Int,
-    val DOLocationID: Int,
-    val passenger_count: Double,
-    val trip_distance: Double,
-    val fare_amount: Double,
-    val extra: Double,
-    val mta_tax: Double,
-    val tip_amount: Double,
-    val tolls_amount: Double,
-    //val ehail_fee: Double, // this field is empty for the trip record
-    val improvement_surcharge: Double,
-    val total_amount: Double,
-    val payment_type: Double,
-    val trip_type: Double,
-    val congestion_surcharge: Double
+    VendorID: Int,
+    lpep_pickup_datetime: DateTime,
+    lpep_dropoff_datetime: DateTime,
+    store_and_fwd_flag: String,
+    RatecodeID: Double,
+    PULocationID: Int,
+    DOLocationID: Int,
+    passenger_count: Double,
+    trip_distance: Double,
+    fare_amount: Double,
+    extra: Double,
+    mta_tax: Double,
+    tip_amount: Double,
+    tolls_amount: Double,
+    //ehail_fee: Double, // this field is empty for the trip record
+    improvement_surcharge: Double,
+    total_amount: Double,
+    payment_type: Double,
+    trip_type: Double,
+    congestion_surcharge: Double
 ) {
+    // each trip is mapped to a pickup cell and dropoff cell on the grid
     def pickupLatLngGridCell(implicit latLngGrid: LatLngGrid): List[LatLngGridCell] = {
         //calculate from PULocationID
         latLngGrid.latLngCells.flatten.filter(latLngCell =>
@@ -142,17 +146,17 @@ case class Trip (
 }
 
 case class LatLng(
-    val lat: Double,
-    val lng: Double
+    lat: Double,
+    lng: Double
 ) {
-  override def toString(): String = {
+  override def toString: String = {
       s"${lat},${lng}"
   }
 }
 
 case class Zone (
-    val id: Int,    //its just locationId
-    val latlngs: List[LatLng]
+    id: Int,    //its just locationId
+    latlngs: List[LatLng]
 )
 
 object LineSegmentCrossDetector {
@@ -172,7 +176,7 @@ class PolygonOverlapDetector(val poly1: List[LatLng], val poly2: List[LatLng]) {
     val sampleSize = 50
     //randomly select 2 positions on a poly to create a segment, forming a mesh overlay of the polygon
     //if num positions of poly is big (> 100), we sample 100 positions randomly
-    def segments(poly: List[LatLng]): List[Tuple2[LatLng,LatLng]] = {
+    def segments(poly: List[LatLng]): List[(LatLng, LatLng)] = {
         val sampledPoly = if (poly.length > sampleSize) {
             Random.shuffle((poly).take(sampleSize))
         } else poly
@@ -230,7 +234,7 @@ class PolygonOverlapDetector(val poly1: List[LatLng], val poly2: List[LatLng]) {
 }
 
 case class ZoneMap (
-    val zoneList: List[Zone]
+    zoneList: List[Zone]
 ) {
   def zoneCrossCell(zone: Zone, cell: (LatLng, LatLng)): Boolean = {
       val d = new PolygonOverlapDetector(zone.latlngs, LatLngGridCell(cell._1,cell._2,List()).toPolygon)
@@ -257,56 +261,57 @@ case class ZoneMap (
 }
 
 case class LatLngGrid (
-    val latLngCells: List[List[LatLngGridCell]]
+    latLngCells: List[List[LatLngGridCell]]
 )
 
 case class LatLngGridCell (
-    val lowerleft: LatLng,
-    val topright: LatLng,
-    val locationIds: List[Int]
+    lowerLeft: LatLng,
+    topRight: LatLng,
+    locationIds: List[Int]
 ) {
-    val lowerright: LatLng = LatLng(topright.lat, lowerleft.lng)
-    val topleft: LatLng = LatLng(lowerleft.lat, topright.lng)
+    val lowerRight: LatLng = LatLng(topRight.lat, lowerLeft.lng)
+    val topLeft: LatLng = LatLng(lowerLeft.lat, topRight.lng)
 
     def toPolygon: List[LatLng] = {
-       List(lowerleft, lowerright, topright, topleft)
+       List(lowerLeft, lowerRight, topRight, topLeft)
     }
 
-    override def toString() : String = {
-        s"${lowerleft}, ${topright}, locationsId ${locationIds.mkString(",")}"
+    override def toString: String = {
+        s"${lowerLeft}, ${topRight}, locationsId ${locationIds.mkString(",")}"
     }
 
-    def toSimpleString() : String = {
-      s"${lowerleft}, ${topright}"
+    def toSimpleString: String = {
+      //s"${lowerLeft}, ${topRight}"
+      s"${topRight}"
     }
 }
 
 case class DateTimeGrid (
-    val dateTimeCells: List[DateTimeCell]
+    dateTimeCells: List[DateTimeCell]
 ) {
-  override def toString(): String = {
+  override def toString: String = {
       dateTimeCells.map {_.toString}.mkString("\n")
   }
 }
 
 case class DateTimeCell (
-    val fromDateTime: DateTime,
-    val toDateTime: DateTime
+    fromDateTime: DateTime,
+    toDateTime: DateTime
 )
 
 case class GridCell3D (
-    val latLngGridCell: LatLngGridCell,
-    val dateTimeGridCell: DateTimeCell
+    latLngGridCell: LatLngGridCell,
+    dateTimeGridCell: DateTimeCell
 ) {
-    override def toString(): String = {
-       s"${latLngGridCell.topright},${dateTimeGridCell.toDateTime}"
+    override def toString: String = {
+       s"${latLngGridCell.topRight},${dateTimeGridCell.toDateTime}"
     }
 }
 
 case class GridTrip (
-    val fromGridCell: GridCell3D,
-    val toGridCell: GridCell3D,
-    val trip: Trip
+    fromGridCell: GridCell3D,
+    toGridCell: GridCell3D,
+    trip: Trip
 )
 
 object TaxiTrip {
@@ -317,7 +322,7 @@ object TaxiTrip {
           val latLngGridSize = ConfigFactory.load().getString("taxiTrip.gridSize.latLngGridSize")
           val dateTimeGridSize = ConfigFactory.load().getString("taxiTrip.gridSize.dateTimeGridSize")
           println(s"input trip data file: ${inputTripDataFile}")
-          println(s"input trip data file: ${inputZoneMapDataFile}")
+          println(s"input zone data file: ${inputZoneMapDataFile}")
           println(s"latlng grid size: ${latLngGridSize}")
           println(s"datetime grid size: ${dateTimeGridSize}")
 
@@ -352,7 +357,7 @@ object TaxiTrip {
           })
 
           //now able to analyze
-          val q1String = "Q1: The highest 50 spatio-temporal cells, by pickup coordinates, in terms of aggregated passengers count and fare amount.\n"
+          val q1String = "\nQ1: The highest 50 spatio-temporal cells, by pickup coordinates, in terms of aggregated passengers count and fare amount.\n"
           val pcAndFAPairByPickupCell = gridCellTrips.groupBy(_.fromGridCell).map({case (fromCell: GridCell3D, gcTrips: List[GridTrip]) => {
             fromCell -> {
               val pcAndFAPairs = gcTrips.map(_.trip).distinct.map(trip =>
@@ -365,7 +370,7 @@ object TaxiTrip {
               s"${gc3D} sum passenger count: ${pair.num1} "
           }}.mkString("\n")
 
-          val q12String = "\ntop 50 cell by pickup location in terms of fare_amount sum:\n" + pcAndFAPairByPickupCell.toList.sortBy(-_._2.num2).take(50).map {case (gc3D,pair) => {
+          val q12String = "\n\ntop 50 cell by pickup location in terms of fare_amount sum:\n" + pcAndFAPairByPickupCell.toList.sortBy(-_._2.num2).take(50).map {case (gc3D,pair) => {
              s"${gc3D} sum fare amount: ${pair.num2} "
           }}.mkString("\n")
 
@@ -375,21 +380,21 @@ object TaxiTrip {
             gridCellTrips.groupBy(_.fromGridCell.dateTimeGridCell.fromDateTime.dayOfYear().get())
               .map({case (day: Int, gcTrips: List[GridTrip]) => {
                 inputData.anyDateTime.dayOfYear().withMinimumValue().withTimeAtStartOfDay().plusDays(day).toDate -> gcTrips.map(_.trip).distinct.size
-          }}).toList.sortBy(-_._2).take(50).map {case (day, numTrips) => {
+          }}).toList.sortBy(-_._2).take(10).map {case (day, numTrips) => {
               s"${day} number of trips: ${numTrips}"
           }}.mkString("\n")
 
-          val q3ResString = "\n\nQ3: The highest 50 pickup-dropoff spatial cells pair, Say, if the highest pair is ( l1, l2), that means that trips starting from l1 and ending in l2 are the most common trips\n" +
+          val q3ResString = "\n\nQ3: The highest 50 pickup-dropoff spatial cells pair - the most common trips that picked up in cell1 and droped off in cell2\n" +
           gridCellTrips.groupBy(gridcelltrip => (gridcelltrip.fromGridCell.latLngGridCell, gridcelltrip.toGridCell.latLngGridCell))
-            .map({case ((fromcell: LatLngGridCell, tocell: LatLngGridCell),gcTrips: List[GridTrip]) =>
-              (fromcell, tocell) -> gcTrips.map(_.trip).distinct.size
+            .map({case ((fromCell: LatLngGridCell, toCell: LatLngGridCell),gcTrips: List[GridTrip]) =>
+              (fromCell, toCell) -> gcTrips.map(_.trip).distinct.size
             }).toList
             .sortBy(-_._2).take(50).map {case (fromCellToCell, numTrips) => {
-            s"from ${fromCellToCell._1.toSimpleString()} to ${fromCellToCell._2.toSimpleString()} number of trips: ${numTrips}"
+            s"from ${fromCellToCell._1.toSimpleString} to ${fromCellToCell._2.toSimpleString} number of trips: ${numTrips}"
           }}.mkString("\n")
 
           println("saving to file....")
-          writeDataToFile("./taxiTripOutput.txt")(q1ResString + "\n" + q2ResString + "\n" + q3ResString)
+          writeDataToFile("./taxiTripOutput.txt")(q1ResString + "\n" + q2ResString + "\n" + q3ResString + "\n")
     }
 
     def readTripData(filePath: String): TripData = {
@@ -399,7 +404,7 @@ object TaxiTrip {
         val formatter = DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss");
         val trips:Iterator[Trip] = for {
           //line <- reader.readNext()
-          linefields <- reader.iterator if linefields.size > 0 && !linefields(0).startsWith("#")
+          linefields <- reader.iterator if linefields.nonEmpty && !linefields.head.startsWith("#")
         } yield {
           val linefieldsTrimed = linefields.map(_.trim)
           Trip(
@@ -439,7 +444,7 @@ object TaxiTrip {
       val latLngPairRegex = "(\\-[0-9]{2}\\.[0-9]+)[ ]([0-9]{2}\\.[0-9]+)".r
       val zones:Iterator[Zone] = for {
         //line <- reader.readNext()
-        linefields <- reader.iterator if linefields.size > 0 && !linefields(0).startsWith("#")
+        linefields <- reader.iterator if linefields.nonEmpty && !linefields.head.startsWith("#")
       } yield {
         val linefieldsTrimed = linefields.map(_.trim)
         val locationId = linefieldsTrimed(5).toInt
