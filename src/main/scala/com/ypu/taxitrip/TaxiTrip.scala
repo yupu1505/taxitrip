@@ -116,7 +116,7 @@ case class Trip (
     trip_type: Double,
     congestion_surcharge: Double
 ) {
-    // each trip is mapped to a pickup cell and dropoff cell on the grid
+    // each trip is mapped to a list of pickup latlng cell and a list of dropoff latlng cell on the grid
     def pickupLatLngGridCell(implicit latLngGrid: LatLngGrid): List[LatLngGridCell] = {
         //calculate from PULocationID
         latLngGrid.latLngCells.flatten.filter(latLngCell =>
@@ -129,6 +129,8 @@ case class Trip (
             latLngCell.locationIds.contains(DOLocationID)
         )
     }
+    // each trip is mapped to one pickup date time cell and a list of dropoff date time cell on the grid
+    // it is possible there are out liners that do not have associated date time grid cells, thus use Option
     def pickupDateTimeGridCell(implicit dateTimeGrid: DateTimeGrid): Option[DateTimeCell] = {
         //calculate from lpep_pickup_datetime
         dateTimeGrid.dateTimeCells.find(dtCell =>
